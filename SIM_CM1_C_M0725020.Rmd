@@ -1,0 +1,652 @@
+---
+title: "Analisis Kategori Film Paling Menguntungkan pada Database Sakila"
+author: "Stella Chelsy Renida - M0725020"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    css: style.css
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+
+```
+
+# IMPORT LIBRARY
+
+```{r}
+
+library(odbc)
+library(DBI)
+library(ggplot2)
+library(dplyr)
+
+```
+
+# PENDAHULUAN
+
+<div class="card">
+
+## Latar Belakang
+
+Perkembangan teknologi informasi menyebabkan perusahaan semakin bergantung pada data dalam pengambilan keputusan bisnis. Salah satu bentuk pemanfaatan data adalah melalui analisis transaksi pelanggan untuk mengetahui pola bisnis yang terjadi.
+
+Database Sakila merupakan database simulasi rental film yang dikembangkan oleh MySQL sebagai media pembelajaran pengelolaan database.
+
+Pada proyek ini dilakukan analisis kategori film paling menguntungkan berdasarkan total revenue dan jumlah rental.
+
+</div>
+
+---
+
+<div class="card">
+
+## Rumusan Masalah
+
+1. Kategori film apa yang menghasilkan revenue terbesar?
+2. Kategori film apa yang paling sering dirental?
+3. Bagaimana hubungan jumlah rental dengan total revenue?
+
+</div>
+
+---
+
+<div class="card">
+
+## Tujuan Analisis
+
+1. Mengetahui kategori film paling menguntungkan.
+2. Mengetahui kategori film paling populer.
+3. Memberikan insight bisnis berdasarkan data rental film.
+
+</div>
+
+---
+
+<div class="card">
+
+## Manfaat Analisis
+
+1. Membantu pengambilan keputusan bisnis.
+2. Menentukan kategori film prioritas.
+3. Meningkatkan strategi pemasaran perusahaan.
+
+</div>
+
+# KONEKSI DATABASE
+
+<div class="card">
+
+Pada tahap ini dilakukan koneksi database MySQL Sakila ke RStudio menggunakan package `odbc` dan `DBI`.
+
+</div>
+
+## Koneksi Database
+
+```{r}
+
+con <- DBI::dbConnect(odbc::odbc(),
+                       Driver   = "MySQL ODBC 8.0 ANSI Driver",
+                       Server   = "127.0.0.1",
+                       Database = "sakila",
+                       UID      = "root",
+                       PWD      = "stella25",
+                       Port     = 3306)
+```
+
+## Menampilkan Tabel Database
+
+```{r}
+
+dbListTables(con)
+
+```
+
+# PENGAMBILAN DATA
+
+<div class="card">
+
+Analisis dilakukan menggunakan beberapa tabel yang saling berhubungan, yaitu:
+
+- category
+- film_category
+- film
+- inventory
+- rental
+- payment
+
+</div>
+
+## Query SQL
+
+```{r}
+
+query <- "
+
+SELECT 
+    c.name AS kategori,
+    COUNT(r.rental_id) AS jumlah_rental,
+    SUM(p.amount) AS total_revenue,
+    AVG(p.amount) AS rata_pembayaran
+
+FROM category c
+
+JOIN film_category fc
+ON c.category_id = fc.category_id
+
+JOIN film f
+ON fc.film_id = f.film_id
+
+JOIN inventory i
+ON f.film_id = i.film_id
+
+JOIN rental r
+ON i.inventory_id = r.inventory_id
+
+JOIN payment p
+ON r.rental_id = p.rental_id
+
+GROUP BY c.name
+
+ORDER BY total_revenue DESC
+
+"
+
+```
+
+## Menjalankan Query
+
+```{r}
+
+film_profit <- dbGetQuery(con, query)
+
+```
+
+## Menampilkan Data
+
+```{r}
+
+print(film_profit)
+
+```
+
+## Struktur Data
+
+```{r}
+
+str(film_profit)
+
+```
+
+# DATA CLEANING DAN TRANSFORMASI
+
+<div class="card">
+
+Tahap data cleaning dilakukan untuk memastikan data siap dianalisis dan tidak memiliki missing value.
+
+</div>
+
+## Pengecekan Missing Value
+
+```{r}
+
+colSums(is.na(film_profit))
+
+```
+
+## Transformasi Data
+
+```{r}
+
+film_profit$total_revenue <- round(
+  film_profit$total_revenue,
+  2
+)
+
+film_profit$rata_pembayaran <- round(
+  film_profit$rata_pembayaran,
+  2
+)
+
+```
+
+# VISUALISASI DATA
+
+<div class="card">
+
+Visualisasi data dilakukan untuk mempermudah pemahaman pola revenue kategori film.
+
+</div>
+
+## Bar Chart Revenue Kategori Film
+
+```{r}
+
+ggplot(
+  film_profit,
+  aes(
+    x    = reorder(kategori, total_revenue),
+    y    = total_revenue,
+    fill = total_revenue
+  )
+) +
+geom_bar(stat = "identity") +
+coord_flip() +
+geom_text(
+  aes(label = round(total_revenue, 0)),
+  hjust = -0.1,
+  size  = 3
+) +
+scale_y_continuous(expand = expansion(mult = c(0, 0.15))) + 
+labs(
+  title = "Kategori Film Paling Menguntungkan",
+  x     = "Kategori Film",
+  y     = "Total Revenue (USD)"
+) +
+theme_minimal()
+
+```
+
+<div class="card">
+
+## Interpretasi Bar Chart
+
+Berdasarkan bar chart di atas, kategori **Sports** merupakan kategori 
+film paling menguntungkan dengan total revenue tertinggi sebesar 
+**$5314**, diikuti oleh **Sci-Fi** ($4757) dan **Animation** ($4656). 
+Kategori **Drama** ($4587) dan **Comedy** ($4384) juga termasuk dalam 
+kelompok lima besar penyumbang revenue tertinggi.
+
+Kategori dengan revenue terendah adalah **Music** ($3418), diikuti 
+**Travel** ($3550) dan **Classics** ($3640). Ketiga kategori ini 
+secara konsisten berada di bawah rata-rata revenue keseluruhan 
+sebesar **$4213**.
+
+Secara keseluruhan, selisih antara kategori tertinggi (Sports, $5314) 
+dan terendah (Music, $3418) hanya sekitar **$1896**, yang menunjukkan 
+distribusi pendapatan yang relatif merata di antara seluruh 16 kategori 
+film.
+
+</div>
+
+## Pie Chart Distribusi Revenue
+
+```{r}
+film_profit %>%
+  mutate(
+    persen = total_revenue / sum(total_revenue) * 100,
+    label  = paste0(round(persen, 1), "%")
+  ) %>%
+  ggplot(aes(x = "", y = persen, fill = kategori)) +
+
+  geom_bar(
+    stat = "identity",
+    width = 1,
+    color = "white"
+  ) +
+
+  coord_polar("y") +
+
+  geom_text(
+    aes(label = label),
+    position = position_stack(vjust = 0.5),
+    size = 3,
+    color = "white",
+    fontface = "bold"
+  ) +
+
+  scale_fill_manual(
+    values = colorRampPalette(c(
+      "#D6EAF8",
+      "#AED6F1",
+      "#5DADE2",
+      "#2E86C1",
+      "#1B4F72"
+    ))(16)
+  ) +
+
+  theme_void() +
+
+  labs(
+    title = "Distribusi Revenue per Kategori",
+    fill = "Kategori"
+  ) +
+
+  theme(
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 14
+    ),
+    
+    legend.position = "right"
+  )
+```
+
+<div class="card">
+
+## Interpretasi Pie Chart
+
+Pie chart menunjukkan bahwa distribusi revenue antar 16 kategori film 
+sangat merata, dengan masing-masing kategori berkontribusi antara 
+**5,1% hingga 7,9%** dari total pendapatan.
+
+Kategori **Sports** memiliki porsi terbesar (**7,9%**), diikuti 
+**Sci-Fi** (7,1%) dan **Drama** (6,8%). Sementara itu, kategori 
+**Music** memiliki porsi terkecil (**5,1%**), diikuti **Travel** (5,3%) 
+dan **Horror** (5,5%).
+
+Selisih antara porsi terbesar dan terkecil hanya **2,8 poin persentase**, 
+yang mengonfirmasi bahwa tidak ada satu kategori pun yang mendominasi 
+secara signifikan. Bisnis rental ini memiliki portofolio pendapatan 
+yang sangat seimbang dan tidak bergantung pada satu kategori tertentu.
+
+</div>
+
+## Line Chart Jumlah Rental
+
+```{r}
+ggplot(
+  film_profit,
+  aes(
+    x = reorder(kategori, jumlah_rental),
+    y = jumlah_rental,
+    group = 1
+  )
+) +
+
+geom_line(
+  linewidth = 1.3,
+  color = "steelblue"
+) +
+
+geom_point(
+  size = 3.5,
+  color = "steelblue"
+) +
+
+geom_text(
+  aes(label = format(jumlah_rental, big.mark = ".")),
+  hjust = -0.4,
+  size = 3.8,
+  fontface = "bold",
+  color = "black"
+) +
+
+coord_flip() +
+
+expand_limits(
+  y = max(film_profit$jumlah_rental) + 60
+) +
+
+labs(
+  title = "Jumlah Rental per Kategori",
+  x = "Kategori",
+  y = "Jumlah Rental"
+) +
+
+theme_minimal() +
+
+theme(
+  plot.title = element_text(
+    size = 16,
+    face = "bold",
+    hjust = 0.5
+  ),
+
+  axis.title = element_text(
+    size = 12,
+    face = "bold"
+  ),
+
+  axis.text = element_text(
+    size = 10
+  ),
+
+  panel.grid.minor = element_blank()
+)
+```
+
+<div class="card">
+
+## Interpretasi Line Chart
+
+Line chart menunjukkan bahwa **Sports** merupakan kategori dengan 
+jumlah rental terbanyak (1179 rental), diikuti **Animation** (1166) 
+dan **Action** (1112). Ketiga kategori ini membentuk kelompok teratas 
+dengan jumlah rental di atas 1100.
+
+Kelompok menengah terdiri dari **Sci-Fi** (1.101), **Family** (1096), 
+**Drama** (1060), **Documentary** (1050), dan **Foreign** (1033), 
+yang berada di kisaran 1000–1110 rental.
+
+Kategori **Music** memiliki jumlah rental paling sedikit (830), 
+diikuti **Travel** (837) dan **Horror** (846). Terdapat *gap* yang 
+cukup mencolok antara kelompok bawah ini dengan kelompok tengah — 
+loncatan dari **Horror** (846) ke **Classics** (939) mencapai sekitar 
+**93 rental**, yang terlihat sebagai lekukan tajam pada grafik.
+
+Pola ini secara umum konsisten dengan hasil bar chart revenue. Namun 
+terdapat pengecualian menarik pada kategori **Comedy** — meskipun 
+jumlah rentalnya tergolong rendah (941, peringkat ke-11 dari 16), 
+Comedy tetap menghasilkan revenue tinggi ($4384, peringkat ke-5),
+yang didukung oleh rata-rata pembayaran per rental tertinggi ($4,66)
+di antara seluruh kategori.
+</div>
+
+# ANALISIS DAN INSIGHT
+
+<div class="card">
+
+## Statistik Deskriptif
+
+```{r}
+
+summary(film_profit)
+
+```
+
+```{r}
+
+film_profit %>%
+  summarise(
+    rata_revenue   = mean(total_revenue),
+    median_revenue = median(total_revenue),
+    sd_revenue     = sd(total_revenue),
+    min_revenue    = min(total_revenue),
+    max_revenue    = max(total_revenue),
+    rata_rental    = mean(as.numeric(jumlah_rental)),
+    median_rental  = median(as.numeric(jumlah_rental)),
+    sd_rental      = sd(as.numeric(jumlah_rental)),
+    min_rental     = min(as.numeric(jumlah_rental)),
+    max_rental     = max(as.numeric(jumlah_rental))
+  )
+
+```
+</div>
+
+## Analisis Korelasi
+
+```{r}
+
+cor_result <- cor.test(
+  as.numeric(film_profit$jumlah_rental),
+  film_profit$total_revenue
+)
+
+cor_result
+
+```
+<div class="card">
+
+## Analisis Data
+
+Berdasarkan hasil statistik deskriptif, rata-rata revenue keseluruhan 
+adalah **$4212,91** dengan median **$4276** dan standar deviasi 
+**$508,65**. Nilai standar deviasi yang relatif kecil dibandingkan 
+rata-rata mengonfirmasi bahwa distribusi revenue antar kategori 
+memang merata.
+
+Kategori **Sports** mendominasi baik dari sisi total revenue ($5314) 
+maupun jumlah rental (1179), menjadikannya kategori paling 
+menguntungkan secara keseluruhan.
+
+Hasil uji korelasi Pearson menunjukkan nilai **r = 0,849** dengan 
+**p-value = 3,233 × 10⁻⁵** (jauh di bawah α = 0,05), yang berarti 
+terdapat **korelasi positif yang kuat dan signifikan secara statistik** 
+antara jumlah rental dan total revenue. Interval kepercayaan 95% 
+berada pada rentang **0,609–0,946**, semakin memperkuat kesimpulan 
+bahwa hubungan ini bukan terjadi secara kebetulan.
+
+Satu temuan menarik adalah kategori **Comedy** — meskipun jumlah 
+rentalnya hanya 941 (peringkat ke-11), Comedy memiliki rata-rata 
+pembayaran per rental tertinggi ($4,66), mendorong total revenuenya 
+tetap kompetitif di posisi ke-5 ($4384). Ini menunjukkan bahwa 
+jumlah rental bukan satu-satunya penentu revenue.
+
+</div>
+
+---
+
+<div class="card">
+
+## Insight Bisnis
+
+Berdasarkan hasil analisis data, terdapat beberapa insight bisnis 
+yang dapat dijadikan acuan pengambilan keputusan:
+
+1. **Prioritaskan kategori Sports, Sci-Fi, dan Animation** — ketiga 
+   kategori ini konsisten unggul baik di revenue maupun jumlah rental. 
+   Sports mencatat revenue tertinggi ($5314) dengan 1179 rental, Animation    mencatat ($4656) dengan 1166 rental, dan Sci-Fi menghasilkan ($4757)      dengan 1101 rental. Penambahan stok dan variasi judul pada kategori ini
+   berpotensi meningkatkan pendapatan lebih lanjut.
+
+2. **Maksimalkan potensi kategori Comedy dan New** — Comedy hanya 
+   memiliki 941 rental (peringkat ke-11) namun menghasilkan revenue 
+   $4384 berkat rata-rata pembayaran tertinggi ($4,66 per rental). 
+   Demikian pula New ($4,63 per rental). Strategi pemasaran yang 
+   meningkatkan frekuensi penyewaan kedua kategori ini dapat 
+   mendongkrak revenue secara signifikan tanpa perlu menambah 
+   banyak stok.
+
+3. **Berikan promosi khusus untuk kategori bawah (Music, Travel, 
+   Horror)** — ketiga kategori ini memiliki jumlah rental terendah 
+   (830, 837, dan 846). Program diskon, bundling, atau rekomendasi 
+   aktif kepada pelanggan dapat membantu mendongkrak minat penyewaan 
+   pada kategori-kategori ini.
+
+4. **Pertahankan keseimbangan portofolio** — distribusi revenue yang 
+   sangat merata (5,1–7,9% per kategori, selisih hanya 2,8 poin 
+   persentase) merupakan indikator positif bahwa bisnis tidak 
+   bergantung pada satu kategori saja. Strategi diversifikasi ini 
+   perlu dipertahankan agar risiko bisnis tetap terkelola dengan baik.
+</div>
+
+# PERSAMAAN LATEX
+
+<div class="card">
+
+## Rumus Rata-rata Revenue
+
+$$
+\bar{x} = \frac{\sum x}{n}
+$$
+
+Keterangan:
+
+- \(\bar{x}\) = rata-rata revenue
+- \(\sum x\) = total revenue
+- \(n\) = jumlah kategori film
+
+Persamaan tersebut digunakan untuk menghitung rata-rata pendapatan pada setiap kategori film.
+
+## Rumus Korelasi Pearson
+
+$$
+r = \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}
+         {\sqrt{\sum_{i=1}^{n}(x_i - \bar{x})^2 \cdot 
+         \sum_{i=1}^{n}(y_i - \bar{y})^2}}
+$$
+
+- $r$       = koefisien korelasi Pearson
+- $x_i$     = jumlah rental kategori ke-i
+- $y_i$     = total revenue kategori ke-i
+- $\bar{x}$ = rata-rata jumlah rental
+- $\bar{y}$ = rata-rata total revenue
+
+Persamaan korelasi Pearson digunakan untuk mengukur hubungan antara jumlah rental dan total revenue pada setiap kategori film.
+</div>
+
+---
+
+<div class="card">
+
+## Rumus Persentase Revenue
+
+$$
+Persentase =
+\frac{Revenue\ Kategori}
+{Total\ Revenue}
+\times 100\%
+$$
+
+Persamaan tersebut digunakan untuk menghitung kontribusi revenue masing-masing kategori film terhadap total pendapatan perusahaan.
+
+</div>
+
+# KESIMPULAN
+
+<div class="card">
+
+Berdasarkan hasil analisis database Sakila terhadap 16 kategori film, 
+dapat disimpulkan bahwa kategori **Sports** merupakan kategori film 
+paling menguntungkan dengan total revenue tertinggi sebesar **$5314** 
+dan jumlah rental terbanyak sebesar **1179 transaksi**.
+
+Hasil uji korelasi Pearson menunjukkan hubungan positif yang kuat 
+(**r = 0,849, p = 3,233 × 10⁻⁵**) antara jumlah rental dan total 
+revenue, mengonfirmasi bahwa frekuensi penyewaan merupakan faktor 
+utama penentu pendapatan.
+
+Distribusi revenue antar 16 kategori terbilang sangat merata, dengan 
+kontribusi masing-masing kategori berkisar antara **5,1–7,9%** dari 
+total pendapatan. Selisih antara kategori teratas (Sports, $5314) 
+dan terbawah (Music, $3418) hanya sekitar **$1896**, menunjukkan 
+fondasi pendapatan bisnis yang stabil dan terdiversifikasi.
+
+Temuan menarik adalah kategori **Comedy** yang meskipun jumlah 
+rentalnya tergolong rendah (941), memiliki rata-rata pembayaran per 
+rental tertinggi ($4,66) sehingga revenue totalnya tetap kompetitif 
+di posisi ke-5. Hal ini menunjukkan bahwa strategi harga juga 
+berperan penting selain volume penyewaan.
+
+Perusahaan disarankan untuk: (1) memprioritaskan stok pada kategori 
+**Sports, Sci-Fi, dan Animation** yang dominan di kedua metrik; 
+(2) mengoptimalkan strategi pemasaran **Comedy dan New** untuk 
+meningkatkan frekuensi rental mengingat nilai pembayaran per 
+rentalnya yang tinggi; serta (3) memberikan program promosi khusus 
+untuk kategori **Music, Travel, dan Horror** guna meningkatkan 
+performa kategori-kategori tersebut.
+
+</div>
+
+# PENUTUP
+
+## Menutup Koneksi Database
+
+```{r}
+
+dbDisconnect(con)
+
+```
